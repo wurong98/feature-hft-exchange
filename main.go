@@ -11,6 +11,7 @@ import (
 	"hft-sim/internal/config"
 	"hft-sim/internal/db"
 	"hft-sim/internal/matching"
+	"hft-sim/internal/snapshot"
 )
 
 func main() {
@@ -55,6 +56,11 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
+
+	// 启动收益快照管理器
+	snapshotMgr := snapshot.NewManager(database.DB)
+	snapshotMgr.Start()
+	defer snapshotMgr.Stop()
 
 	log.Println("Server running on :8080")
 

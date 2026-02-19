@@ -40,13 +40,25 @@ func main() {
 
 func createKey(database *db.DB, name, desc string, balance float64) {
 	key := uuid.New().String()
+
+	// 创建 API Key
 	_, err := database.Exec(
 		"INSERT INTO api_keys (key, name, description, initial_balance) VALUES (?, ?, ?, ?)",
 		key, name, desc, balance)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// 初始化余额记录
+	_, err = database.Exec(
+		"INSERT INTO balances (api_key, available, frozen, total_pnl) VALUES (?, ?, 0, 0)",
+		key, balance)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	fmt.Printf("Created API Key: %s\n", key)
+	fmt.Printf("Initial Balance: %.2f USDT\n", balance)
 }
 
 func listKeys(database *db.DB) {

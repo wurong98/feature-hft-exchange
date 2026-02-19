@@ -202,3 +202,53 @@ func (s *Server) getStrategyPositions(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, positions)
 }
+
+// getStrategyOrders 获取策略的当前委托（未成交订单）
+func (s *Server) getStrategyOrders(c *gin.Context) {
+	apiKey := c.Param("apiKey")
+	orders, err := s.orderStore.GetByAPIKey(apiKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 只返回未成交的订单
+	var openOrders []models.Order
+	for _, order := range orders {
+		if order.Status == models.OrderStatusNew || order.Status == models.OrderStatusPartiallyFilled {
+			openOrders = append(openOrders, order)
+		}
+	}
+
+	c.JSON(http.StatusOK, openOrders)
+}
+
+// getStrategySnapshots 获取策略的收益快照
+func (s *Server) getStrategySnapshots(c *gin.Context) {
+	apiKey := c.Param("apiKey")
+	limit := 100 // 默认返回最近100条
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	snapshots, err := s.snapshotStore.GetSnapshotsByAPIKey(apiKey, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, snapshots)
+}
+
+// getOrderbook 获取订单簿深度
+func (s *Server) getOrderbook(c *gin.Context) {
+	symbol := c.Param("symbol")
+	if symbol == "" {
+		symbol = "BTCUSDT"
+	}
+
+	snapshot := s.orderbook.GetSnapshot(symbol)
+	c.JSON(http.StatusOK, snapshot)
+}

@@ -9,11 +9,13 @@ import (
 )
 
 type Server struct {
-	router          *gin.Engine
-	orderStore      *store.OrderStore
-	balanceStore    *store.BalanceStore
-	positionStore   *store.PositionStore
+	router           *gin.Engine
+	orderStore       *store.OrderStore
+	balanceStore     *store.BalanceStore
+	positionStore    *store.PositionStore
 	leaderboardStore *store.LeaderboardStore
+	snapshotStore    *store.SnapshotStore
+	orderbook        *Orderbook
 }
 
 func NewServer(db *sql.DB) *Server {
@@ -23,6 +25,8 @@ func NewServer(db *sql.DB) *Server {
 		balanceStore:     store.NewBalanceStore(db),
 		positionStore:    store.NewPositionStore(db),
 		leaderboardStore: store.NewLeaderboardStore(db),
+		snapshotStore:    store.NewSnapshotStore(db),
+		orderbook:        NewOrderbook(),
 	}
 
 	s.setupRoutes()
@@ -56,6 +60,9 @@ func (s *Server) setupRoutes() {
 		dashboard.GET("/strategy/:apiKey", s.getStrategyDetail)
 		dashboard.GET("/strategy/:apiKey/trades", s.getStrategyTrades)
 		dashboard.GET("/strategy/:apiKey/positions", s.getStrategyPositions)
+		dashboard.GET("/strategy/:apiKey/orders", s.getStrategyOrders)
+		dashboard.GET("/strategy/:apiKey/snapshots", s.getStrategySnapshots)
+		dashboard.GET("/orderbook/:symbol", s.getOrderbook)
 	}
 
 	// WebSocket

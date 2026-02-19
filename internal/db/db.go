@@ -92,6 +92,19 @@ CREATE TABLE IF NOT EXISTS balances (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (api_key) REFERENCES api_keys(key)
 );
+
+CREATE TABLE IF NOT EXISTS pnl_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    api_key TEXT NOT NULL,
+    total_pnl DECIMAL NOT NULL,
+    available DECIMAL NOT NULL,
+    frozen DECIMAL NOT NULL,
+    snapshot_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (api_key) REFERENCES api_keys(key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pnl_snapshots_api_key ON pnl_snapshots(api_key);
+CREATE INDEX IF NOT EXISTS idx_pnl_snapshots_time ON pnl_snapshots(snapshot_at);
 `
 	_, err := db.Exec(schema)
 	return err

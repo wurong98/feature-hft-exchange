@@ -1,261 +1,484 @@
-// 状态管理
+// State Management
 let currentStrategy = null;
 let leaderboardData = [];
+let refreshInterval = null;
 
-// API 基础 URL
 const API_BASE = '';
 
-// 格式化数字
+// Utility Functions
 function formatNumber(num, decimals = 2) {
     if (num === undefined || num === null || num === '') return '-';
     const n = parseFloat(num);
     if (isNaN(n)) return '-';
+
+    if (Math.abs(n) >= 1000000) {
+        return (n / 1000000).toFixed(2) + 'M';
+    } else if (Math.abs(n) >= 1000) {
+        return (n / 1000).toFixed(2) + 'K';
+    }
     return n.toFixed(decimals);
 }
 
-// 格式化收益率
-function formatROI(roi) {
-    const sign = roi >= 0 ? '+' : '';
-    const className = roi >= 0 ? 'profit' : 'loss';
-    return `<span class="${className}">${sign}${formatNumber(roi)}%</span>`;
+function formatPrice(price) {
+    const p = parseFloat(price);
+    if (p >= 1000) return p.toFixed(2);
+    if (p >= 1) return p.toFixed(4);
+    return p.toFixed(6);
 }
 
-// 加载排行榜
+function formatTime(timeStr) {
+    if (!timeStr) return '-';
+    const date = new Date(timeStr);
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getROIColor(roi) {
+    const r = parseFloat(roi) || 0;
+    return r >= 0 ? 'positive' : 'negative';
+}
+
+// Load Leaderboard
 async function loadLeaderboard() {
     try {
         const response = await fetch(`${API_BASE}/api/dashboard/leaderboard`);
-        if (!response.ok) throw new Error('Failed to load leaderboard');
+        if (!response.ok) throw new Error('Failed to load');
 
         leaderboardData = await response.json();
         renderLeaderboard();
-
-        document.getElementById('connection-status').textContent = '已连接';
-        document.getElementById('connection-status').style.color = '#3fb950';
+        updateHeaderStats();
     } catch (error) {
-        console.error('Error loading leaderboard:', error);
-        document.getElementById('connection-status').textContent = '连接失败';
-        document.getElementById('connection-status').style.color = '#f85149';
+        console.error('Error:', error);
     }
 }
 
-// 渲染排行榜
+function updateHeaderStats() {
+    document.getElementById('active-strategies').textContent = leaderboardData.length;
+    const totalTrades = leaderboardData.reduce((sum, s) => sum + (s.tradeCount || 0), 0);
+    document.getElementById('total-volume').textContent = formatNumber(totalTrades, 0);
+}
+
 function renderLeaderboard() {
     const container = document.getElementById('strategy-list');
+    const searchTerm = document.getElementById('search-input')?.value?.toLowerCase() || '';
 
-    if (leaderboardData.length === 0) {
+    let filtered = leaderboardData;
+    if (searchTerm) {
+        filtered = leaderboardData.filter(s =>
+            (s.name && s.name.toLowerCase().includes(searchTerm)) ||
+            (s.description && s.description.toLowerCase().includes(searchTerm))
+        );
+    }
+
+    if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无策略数据</div>';
         return;
     }
 
-    container.innerHTML = leaderboardData.map((strategy, index) => {
-        const totalPnl = parseFloat(strategy.totalPnl) || 0;
+    container.innerHTML = filtered.map((strategy, index) => {
+        const rank = index + 1;
+        const rankClass = rank <= 3 ? 'top3' : '';
+        const pnl = parseFloat(strategy.totalPnl) || 0;
         const roi = parseFloat(strategy.roi) || 0;
+
         return `
-        <div class="strategy-item ${currentStrategy?.apiKey === strategy.apiKey ? 'active' : ''}"
-             onclick="selectStrategy('${strategy.apiKey}')">
-            <div class="strategy-header">
-                <span class="strategy-name">${strategy.name || '未命名策略'}</span>
-                <span class="strategy-rank">#${index + 1}</span>
-            </div>
-            <div class="strategy-desc">${strategy.description || '暂无描述'}</div>
-            <div class="strategy-stats">
-                <div>
-                    <span class="stat-value ${totalPnl >= 0 ? 'profit' : 'loss'}">
-                        ${totalPnl >= 0 ? '+' : ''}${formatNumber(totalPnl)}
+            <div class="strategy-item ${currentStrategy?.apiKey === strategy.apiKey ? 'active' : ''}"
+                 onclick="selectStrategy('${strategy.apiKey}')">
+                <div class="strategy-header">
+                    <div>
+                        <span class="strategy-rank ${rankClass}">${rank}</span>
+                        <span class="strategy-name">${strategy.name || '未命名'}</span>
+                    </div>
+                    <span class="strategy-pnl ${getROIColor(pnl)}">
+                        ${pnl >= 0 ? '+' : ''}${formatNumber(pnl)}
                     </span>
-                    <span class="stat-label">USDT</span>
                 </div>
-                <div>
-                    <span class="stat-value">${strategy.tradeCount || 0}</span>
-                    <span class="stat-label">成交</span>
+                <div class="strategy-stats">
+                    <div class="strategy-stat">
+                        <span>ROI</span>
+                        <span class="strategy-stat-value ${getROIColor(roi)}">${roi >= 0 ? '+' : ''}${formatNumber(roi)}%</span>
+                    </div>
+                    <div class="strategy-stat">
+                        <span>成交</span>
+                        <span class="strategy-stat-value">${strategy.tradeCount || 0}</span>
+                    </div>
+                    <div class="strategy-stat">
+                        <span>初始资金</span>
+                        <span class="strategy-stat-value">${formatNumber(strategy.initialBalance, 0)}</span>
+                    </div>
                 </div>
-                <div>
-                    <span class="stat-value ${roi >= 0 ? 'profit' : 'loss'}">
-                        ${roi >= 0 ? '+' : ''}${formatNumber(roi)}%
-                    </span>
-                    <span class="stat-label">ROI</span>
-                </div>
-            </div>
-        </div>
-    `}).join('');
-}
-
-// 选择策略
-async function selectStrategy(apiKey) {
-    currentStrategy = leaderboardData.find(s => s.apiKey === apiKey);
-    renderLeaderboard(); // 重新渲染以更新 active 状态
-
-    const detailPanel = document.getElementById('detail-panel');
-    detailPanel.innerHTML = `
-        <div class="loading">
-            <div class="spinner"></div>
-            加载策略详情...
-        </div>
-    `;
-
-    try {
-        // 并行加载数据
-        const [stats, positions, trades] = await Promise.all([
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`).then(r => r.json())
-        ]);
-
-        renderStrategyDetail(stats, positions, trades);
-    } catch (error) {
-        console.error('Error loading strategy detail:', error);
-        detailPanel.innerHTML = `
-            <div class="detail-empty">
-                <h2>加载失败</h2>
-                <p>无法获取策略详情，请稍后重试</p>
             </div>
         `;
+    }).join('');
+}
+
+// Select Strategy
+async function selectStrategy(apiKey) {
+    currentStrategy = leaderboardData.find(s => s.apiKey === apiKey);
+    if (!currentStrategy) return;
+
+    renderLeaderboard();
+
+    const panel = document.getElementById('detail-panel');
+    panel.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
+
+    try {
+        const [stats, positions, trades, orders, snapshots, orderbook] = await Promise.all([
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/orderbook/BTCUSDT`).then(r => r.json())
+        ]);
+
+        renderStrategyDetail(stats, positions, trades, orders, snapshots, orderbook);
+
+        // Auto refresh every 5 seconds
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => refreshDetail(apiKey), 5000);
+    } catch (error) {
+        console.error('Error:', error);
+        panel.innerHTML = '<div class="empty-state">加载失败，请重试</div>';
     }
 }
 
-// 渲染策略详情
-function renderStrategyDetail(stats, positions, trades) {
-    const detailPanel = document.getElementById('detail-panel');
+async function refreshDetail(apiKey) {
+    if (!currentStrategy || currentStrategy.apiKey !== apiKey) return;
+
+    try {
+        const [positions, trades, orders, snapshots] = await Promise.all([
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`).then(r => r.json()),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`).then(r => r.json())
+        ]);
+
+        updateDynamicSections(positions, trades, orders, snapshots);
+    } catch (error) {
+        console.error('Refresh error:', error);
+    }
+}
+
+function updateDynamicSections(positions, trades, orders, snapshots) {
+    // Update positions
+    const positionsBody = document.getElementById('positions-body');
+    if (positionsBody) {
+        positionsBody.innerHTML = renderPositionsRows(positions);
+    }
+
+    // Update orders
+    const ordersList = document.getElementById('orders-list');
+    if (ordersList) {
+        ordersList.innerHTML = renderOrdersList(orders);
+    }
+
+    // Update trades
+    const tradesBody = document.getElementById('trades-body');
+    if (tradesBody) {
+        tradesBody.innerHTML = renderTradesRows(trades.slice(0, 20));
+    }
+
+    // Update PnL chart
+    if (snapshots.length > 0) {
+        drawPnLChart(snapshots);
+    }
+}
+
+function renderStrategyDetail(stats, positions, trades, orders, snapshots, orderbook) {
+    const panel = document.getElementById('detail-panel');
 
     const available = parseFloat(stats.available) || 0;
     const frozen = parseFloat(stats.frozen) || 0;
     const totalPnl = parseFloat(stats.totalPnl) || 0;
     const roi = parseFloat(stats.roi) || 0;
     const initialBalance = parseFloat(stats.initialBalance) || 0;
-
     const totalEquity = available + frozen;
     const marginUsage = initialBalance > 0 ? (frozen / initialBalance * 100) : 0;
 
-    // 计算风险等级
-    let riskClass = 'risk-low';
-    let riskText = '低风险';
-    if (marginUsage > 50) {
-        riskClass = 'risk-high';
-        riskText = '高风险';
-    } else if (marginUsage > 20) {
-        riskClass = 'risk-medium';
-        riskText = '中风险';
+    let riskLevel = 'low', riskText = '低风险';
+    if (marginUsage > 50) { riskLevel = 'high'; riskText = '高风险'; }
+    else if (marginUsage > 20) { riskLevel = 'medium'; riskText = '中风险'; }
+
+    panel.innerHTML = `
+        <div class="top-stats">
+            <div class="top-stat-card">
+                <div class="top-stat-label">累计收益</div>
+                <div class="top-stat-value ${getROIColor(totalPnl)}">${totalPnl >= 0 ? '+' : ''}${formatNumber(totalPnl)} USDT</div>
+                <div class="top-stat-change ${getROIColor(roi)}">${roi >= 0 ? '+' : ''}${formatNumber(roi)}% ROI</div>
+            </div>
+            <div class="top-stat-card">
+                <div class="top-stat-label">当前权益</div>
+                <div class="top-stat-value">${formatNumber(totalEquity)} USDT</div>
+                <div class="top-stat-change" style="color: var(--text-muted);">初始: ${formatNumber(initialBalance)}</div>
+            </div>
+            <div class="top-stat-card">
+                <div class="top-stat-label">可用余额</div>
+                <div class="top-stat-value">${formatNumber(available)} USDT</div>
+                <div class="top-stat-change" style="color: var(--text-muted);">冻结: ${formatNumber(frozen)}</div>
+            </div>
+            <div class="top-stat-card">
+                <div class="top-stat-label">持仓数量</div>
+                <div class="top-stat-value">${positions.length}</div>
+                <div class="top-stat-change" style="color: var(--text-muted);">未成交: ${orders.length}</div>
+            </div>
+            <div class="top-stat-card">
+                <div class="top-stat-label">风险等级</div>
+                <div class="risk-meter" style="margin-top: 8px;">
+                    <div class="risk-bar">
+                        <div class="risk-fill ${riskLevel}" style="width: ${Math.min(marginUsage, 100)}%"></div>
+                    </div>
+                    <span class="risk-text ${riskLevel}">${riskText}</span>
+                </div>
+                <div class="top-stat-change" style="color: var(--text-muted); margin-top: 4px;">保证金占用: ${formatNumber(marginUsage)}%</div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="left-column">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">收益曲线 (24H)</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" id="pnl-chart">
+                            ${snapshots.length > 0 ? drawPnLChart(snapshots) : '<div class="empty-state">暂无数据</div>'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">当前持仓</span>
+                        <span class="card-badge">${positions.length}</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>开仓价格</th>
+                                    <th>数量</th>
+                                    <th>杠杆</th>
+                                    <th>保证金</th>
+                                    <th>未实现盈亏</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positions-body">
+                                ${renderPositionsRows(positions)}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">历史成交</span>
+                        <span class="card-badge">${trades.length}</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>成交额</th>
+                                    <th>手续费</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-body">
+                                ${renderTradesRows(trades.slice(0, 20))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-column">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">订单簿 BTCUSDT</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="orderbook">
+                            <div class="orderbook-header" style="padding: 8px 12px;">
+                                <span>价格</span>
+                                <span>数量</span>
+                                <span>累计</span>
+                            </div>
+                            <div class="orderbook-asks" style="max-height: 150px; overflow: hidden;">
+                                ${renderOrderbookAsks(orderbook.asks.slice().reverse())}
+                            </div>
+                            <div style="padding: 8px 12px; background: var(--bg-tertiary); text-align: center; font-weight: 600; color: var(--text-primary);">
+                                ${orderbook.asks.length > 0 ? formatPrice(orderbook.asks[0].price) : '-'}
+                            </div>
+                            <div class="orderbook-bids" style="max-height: 150px; overflow: hidden;">
+                                ${renderOrderbookBids(orderbook.bids)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">当前委托</span>
+                        <span class="card-badge">${orders.length}</span>
+                    </div>
+                    <div class="card-body" style="padding: 0;" id="orders-list">
+                        ${renderOrdersList(orders)}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (snapshots.length > 0) {
+        drawPnLChart(snapshots);
+    }
+}
+
+function renderPositionsRows(positions) {
+    if (positions.length === 0) {
+        return '<tr><td colspan="7" class="empty-state">暂无持仓</td></tr>';
     }
 
-    detailPanel.innerHTML = `
-        <div class="detail-header">
-            <h2>${stats.name || '未命名策略'}</h2>
-            <span class="api-key">${stats.apiKey}</span>
-        </div>
+    return positions.map(p => {
+        const pnl = parseFloat(p.unrealizedPnl) || 0;
+        return `
+            <tr>
+                <td class="symbol">${p.symbol}</td>
+                <td class="${p.side === 'LONG' ? 'side-long' : 'side-short'}">${p.side}</td>
+                <td>${formatPrice(p.entryPrice)}</td>
+                <td>${formatNumber(p.size, 4)}</td>
+                <td>${p.leverage}x</td>
+                <td>${formatNumber(p.margin)} USDT</td>
+                <td class="${pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnl >= 0 ? '+' : ''}${formatNumber(pnl)}</td>
+            </tr>
+        `;
+    }).join('');
+}
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-card-title">累计收益 (USDT)</div>
-                <div class="stat-card-value ${totalPnl >= 0 ? 'profit' : 'loss'}">
-                    ${totalPnl >= 0 ? '+' : ''}${formatNumber(totalPnl)}
-                </div>
-                <div class="stat-card-sub">初始资金: ${formatNumber(initialBalance)} USDT</div>
+function renderTradesRows(trades) {
+    if (trades.length === 0) {
+        return '<tr><td colspan="7" class="empty-state">暂无成交记录</td></tr>';
+    }
+
+    return trades.map(t => `
+        <tr>
+            <td>${formatTime(t.time || t.timestamp)}</td>
+            <td class="symbol">${t.symbol}</td>
+            <td class="${t.side === 'BUY' ? 'side-long' : 'side-short'}">${t.side}</td>
+            <td>${formatPrice(t.price)}</td>
+            <td>${formatNumber(t.qty || t.quantity, 4)}</td>
+            <td>${formatNumber(t.quoteQty)} USDT</td>
+            <td>${formatNumber(t.fee, 4)}</td>
+        </tr>
+    `).join('');
+}
+
+function renderOrdersList(orders) {
+    if (orders.length === 0) {
+        return '<div class="empty-state" style="padding: 24px;">暂无未成交订单</div>';
+    }
+
+    return orders.map(o => `
+        <div class="order-item">
+            <div class="order-info">
+                <div class="order-symbol">${o.symbol} <span style="color: var(--text-muted);">${o.side}</span></div>
+                <div class="order-details">限价 ${formatPrice(o.price)} | ${o.leverage}x杠杆</div>
             </div>
-
-            <div class="stat-card">
-                <div class="stat-card-title">收益率 (ROI)</div>
-                <div class="stat-card-value ${roi >= 0 ? 'profit' : 'loss'}">
-                    ${roi >= 0 ? '+' : ''}${formatNumber(roi)}%
-                </div>
-                <div class="stat-card-sub">总交易: ${stats.tradeCount || 0} 笔</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-title">当前权益</div>
-                <div class="stat-card-value">${formatNumber(totalEquity)}</div>
-                <div class="stat-card-sub">可用: ${formatNumber(available)} / 冻结: ${formatNumber(frozen)}</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-title">风险等级</div>
-                <div class="stat-card-value ${riskClass}">${riskText}</div>
-                <div class="stat-card-sub">保证金占用: ${formatNumber(marginUsage)}%</div>
+            <div class="order-price">
+                <div class="order-amount">${formatNumber(o.quantity, 4)}</div>
+                <div class="order-type">${o.status}</div>
             </div>
         </div>
+    `).join('');
+}
 
-        <div class="section">
-            <div class="section-header">当前持仓 (${positions.length})</div>
-            ${positions.length > 0 ? `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>交易对</th>
-                            <th>方向</th>
-                            <th>开仓价格</th>
-                            <th>持仓数量</th>
-                            <th>杠杆</th>
-                            <th>保证金</th>
-                            <th>未实现盈亏</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${positions.map(p => {
-                            const unrealizedPnl = parseFloat(p.unrealizedPnl) || 0;
-                            return `
-                            <tr>
-                                <td>${p.symbol}</td>
-                                <td class="${p.side === 'LONG' ? 'side-long' : 'side-short'}">${p.side}</td>
-                                <td>${formatNumber(p.entryPrice)}</td>
-                                <td>${formatNumber(p.size)}</td>
-                                <td>${p.leverage}x</td>
-                                <td>${formatNumber(p.margin)} USDT</td>
-                                <td class="${unrealizedPnl >= 0 ? 'profit' : 'loss'}">
-                                    ${unrealizedPnl >= 0 ? '+' : ''}${formatNumber(unrealizedPnl)}
-                                </td>
-                            </tr>
-                        `}).join('')}
-                    </tbody>
-                </table>
-            ` : '<div class="empty-state">暂无持仓</div>'}
-        </div>
+function renderOrderbookAsks(asks) {
+    return asks.map(a => {
+        const qty = parseFloat(a.quantity);
+        const width = Math.min((qty / 10) * 100, 100);
+        return `
+            <div class="orderbook-row ask">
+                <div class="orderbook-bar ask" style="width: ${width}%"></div>
+                <span>${formatPrice(a.price)}</span>
+                <span>${formatNumber(qty, 4)}</span>
+                <span style="color: var(--text-muted);">-</span>
+            </div>
+        `;
+    }).join('');
+}
 
-        <div class="section">
-            <div class="section-header">历史成交 (${trades.length})</div>
-            ${trades.length > 0 ? `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>时间</th>
-                            <th>交易对</th>
-                            <th>方向</th>
-                            <th>价格</th>
-                            <th>数量</th>
-                            <th>成交额</th>
-                            <th>手续费</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${trades.slice(0, 50).map(t => `
-                            <tr>
-                                <td>${formatTime(t.time)}</td>
-                                <td>${t.symbol}</td>
-                                <td class="${t.side === 'BUY' ? 'side-long' : 'side-short'}">${t.side}</td>
-                                <td>${formatNumber(t.price)}</td>
-                                <td>${formatNumber(t.qty || t.quantity)}</td>
-                                <td>${formatNumber(t.quoteQty)} USDT</td>
-                                <td>${formatNumber(t.fee)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                ${trades.length > 50 ? `<div class="empty-state">还有 ${trades.length - 50} 条记录...</div>` : ''}
-            ` : '<div class="empty-state">暂无成交记录</div>'}
-        </div>
+function renderOrderbookBids(bids) {
+    return bids.map(b => {
+        const qty = parseFloat(b.quantity);
+        const width = Math.min((qty / 10) * 100, 100);
+        return `
+            <div class="orderbook-row bid">
+                <div class="orderbook-bar bid" style="width: ${width}%"></div>
+                <span>${formatPrice(b.price)}</span>
+                <span>${formatNumber(qty, 4)}</span>
+                <span style="color: var(--text-muted);">-</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function drawPnLChart(snapshots) {
+    const container = document.getElementById('pnl-chart');
+    if (!container || snapshots.length === 0) return;
+
+    const sorted = snapshots.slice().sort((a, b) => new Date(a.snapshotAt) - new Date(b.snapshotAt));
+    const values = sorted.map(s => parseFloat(s.totalPnl) || 0);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    const width = container.clientWidth || 800;
+    const height = 200;
+    const padding = 20;
+
+    const points = values.map((v, i) => {
+        const x = padding + (i / (values.length - 1 || 1)) * (width - padding * 2);
+        const y = height - padding - ((v - min) / range) * (height - padding * 2);
+        return `${x},${y}`;
+    }).join(' ');
+
+    const color = values[values.length - 1] >= values[0] ? 'var(--color-long)' : 'var(--color-short)';
+
+    container.innerHTML = `
+        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="${color}" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+                </linearGradient>
+            </defs>
+            <polygon points="${padding},${height-padding} ${points} ${width-padding},${height-padding}" fill="url(#pnlGradient)"/>
+            <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2"/>
+        </svg>
     `;
 }
 
-// 格式化时间
-function formatTime(timeStr) {
-    if (!timeStr) return '-';
-    const date = new Date(timeStr);
-    return date.toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
+// Search functionality
+document.addEventListener('DOMContentLoaded', () => {
+    loadLeaderboard();
+    setInterval(loadLeaderboard, 5000);
 
-// 初始化
-loadLeaderboard();
-setInterval(loadLeaderboard, 5000); // 每5秒刷新排行榜
+    document.getElementById('search-input')?.addEventListener('input', renderLeaderboard);
+});
+
+window.addEventListener('beforeunload', () => {
+    if (refreshInterval) clearInterval(refreshInterval);
+});

@@ -32,14 +32,14 @@ func (s *LeaderboardStore) GetLeaderboard() ([]LeaderboardEntry, error) {
 			a.name,
 			a.description,
 			a.initial_balance,
-			b.available,
-			b.total_pnl,
+			COALESCE(b.available, 0) as available,
+			COALESCE(b.total_pnl, 0) as total_pnl,
 			COUNT(t.id) as trade_count
 		FROM api_keys a
 		LEFT JOIN balances b ON a.key = b.api_key
 		LEFT JOIN trades t ON a.key = t.api_key
 		GROUP BY a.key
-		ORDER BY b.total_pnl DESC
+		ORDER BY total_pnl DESC
 	`
 
 	rows, err := s.db.Query(query)
@@ -90,9 +90,9 @@ func (s *LeaderboardStore) GetStrategyStats(apiKey string) (*StrategyStats, erro
 			a.key,
 			a.name,
 			a.initial_balance,
-			b.available,
-			b.frozen,
-			b.total_pnl,
+			COALESCE(b.available, 0) as available,
+			COALESCE(b.frozen, 0) as frozen,
+			COALESCE(b.total_pnl, 0) as total_pnl,
 			COUNT(t.id) as trade_count
 		FROM api_keys a
 		LEFT JOIN balances b ON a.key = b.api_key
