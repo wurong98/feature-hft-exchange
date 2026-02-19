@@ -73,19 +73,20 @@ class HFTExchangeTester:
             print(f"    [-] 失败: {result.get('msg', result.get('error', 'Unknown'))}")
             return False
 
-        balances = result.get('balances', [])
-        positions = result.get('positions', [])
+        balances = result.get('balances') or []
+        positions = result.get('positions') or []
 
         print(f"    [✓] 账户查询成功")
         print(f"        账户类型: {result.get('accountType', 'N/A')}")
 
         for bal in balances:
-            if float(bal['free']) > 0 or float(bal['locked']) > 0:
-                print(f"        {bal['asset']}: 可用={bal['free']}, 冻结={bal['locked']}")
+            if float(bal.get('free', 0)) > 0 or float(bal.get('locked', 0)) > 0:
+                print(f"        {bal.get('asset', 'N/A')}: 可用={bal.get('free', 0)}, 冻结={bal.get('locked', 0)}")
 
         print(f"        当前持仓: {len(positions)} 个")
         for pos in positions:
-            print(f"          - {pos['symbol']}: {pos['side']} {pos['size']} @ {pos['entryPrice']}")
+            print(f"          - {pos.get('symbol', 'N/A')}: {pos.get('side', 'N/A')} "
+                  f"{pos.get('size', 0)} @ {pos.get('entryPrice', 0)}")
 
         return True
 
