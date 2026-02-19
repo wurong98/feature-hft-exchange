@@ -527,10 +527,10 @@ async function loadSupportedSymbols() {
         // Render symbols in bottom bar
         renderSupportedSymbols();
 
-        // Start polling for latest trades
+        // Start polling for latest trades (every 5 seconds)
         updateWSStatus('connected', '已连接');
         pollLatestTrades();
-        setInterval(pollLatestTrades, 1000); // Poll every second
+        setInterval(pollLatestTrades, 5000); // Poll every 5 seconds
     } catch (err) {
         console.error('Failed to load supported symbols:', err);
         updateWSStatus('error', '配置加载失败');
@@ -546,6 +546,9 @@ function renderSupportedSymbols() {
     `).join('');
 }
 
+// Store latest trades from backend
+let latestTradesData = {};
+
 // Poll latest trades from backend API
 async function pollLatestTrades() {
     try {
@@ -558,10 +561,25 @@ async function pollLatestTrades() {
         const trades = await response.json();
         updateWSStatus('connected', '数据正常');
 
-        // Process each trade
+        // Store trades data
+        latestTradesData = trades;
+
+        // Update each symbol's active state
         Object.entries(trades).forEach(([symbol, trade]) => {
-            handleTradeUpdate(trade);
+            const tag = document.getElementById(`symbol-${symbol}`);
+            if (tag) {
+                tag.classList.add('active');
+                setTimeout(() => tag.classList.remove('active'), 500);
+            }
+            // Update latest price
+            const price = parseFloat(trade.p || trade.Price);
+            if (price) {
+                latestPrices[symbol] = price;
+            }
         });
+
+        // Render in fixed symbol order
+        renderTradeTickerFixed();
     } catch (err) {
         console.error('Failed to poll latest trades:', err);
         updateWSStatus('error', '连接错误');
@@ -584,78 +602,36 @@ function updateWSStatus(status, text) {
     wsText.textContent = text;
 }
 
-function handleTradeUpdate(trade) {
-    // HFT backend trade format (matches collector.Trade)
-    const symbol = trade.s || trade.Symbol; // Symbol
-    const price = parseFloat(trade.p || trade.Price); // Price
-    const quantity = parseFloat(trade.q || trade.Quantity); // Quantity
-    const isBuyerMaker = trade.m || trade.IsBuyerMM; // Is buyer maker
-    const time = trade.T || trade.TradeTime || trade.EventTime; // Trade time
-
-    if (!symbol || !price) return;
-
-    // Store latest price
-    const prevPrice = latestPrices[symbol] || price;
-    latestPrices[symbol] = price;
-
-    // Update symbol tag to show it's active
-    const tag = document.getElementById(`symbol-${symbol}`);
-    if (tag) {
-        tag.classList.add('active');
-        setTimeout(() => tag.classList.remove('active'), 500);
-    }
-
-    // Add to ticker
-    addTradeToTicker({
-        symbol,
-        price,
-        quantity,
-        side: isBuyerMaker ? 'SELL' : 'BUY',
-        time
-    });
-}
-
-const tradeHistory = [];
-const MAX_TRADES = 10;
-
-function addTradeToTicker(trade) {
-    // Check if this symbol already exists in history
-    const existingIndex = tradeHistory.findIndex(t => t.symbol === trade.symbol);
-    if (existingIndex >= 0) {
-        // Update existing
-        tradeHistory[existingIndex] = trade;
-    } else {
-        // Add new
-        tradeHistory.unshift(trade);
-    }
-
-    // Keep only MAX_TRADES
-    if (tradeHistory.length > MAX_TRADES) {
-        tradeHistory.pop();
-    }
-
-    // Sort by time (newest first)
-    tradeHistory.sort((a, b) => b.time - a.time);
-
-    renderTradeTicker();
-}
-
-function renderTradeTicker() {
+// Render trades in fixed symbol order
+function renderTradeTickerFixed() {
     const container = document.getElementById('ticker-content');
     if (!container) return;
 
-    if (tradeHistory.length === 0) {
+    if (supportedSymbols.length === 0) {
         container.innerHTML = '<span class="ticker-empty">等待数据...</span>';
         return;
     }
 
-    container.innerHTML = tradeHistory.map(t => {
-        const timeStr = new Date(t.time).toLocaleTimeString('zh-CN', { hour12: false });
+    container.innerHTML = supportedSymbols.map(symbol => {
+        const trade = latestTradesData[symbol];
+        if (!trade) {
+            return `
+                <div class="ticker-item">
+                    <span class="ticker-symbol">${symbol}</span>
+                    <span class="ticker-price" style="color: var(--text-muted);">-</span>
+                    <span class="ticker-time">-</span>
+                </div>
+            `;
+        }
+
+        const price = parseFloat(trade.p || trade.Price);
+        const time = trade.T || trade.TradeTime || trade.EventTime;
+        const timeStr = time ? new Date(time).toLocaleTimeString('zh-CN', { hour12: false }) : '-';
 
         return `
             <div class="ticker-item">
-                <span class="ticker-symbol">${t.symbol}</span>
-                <span class="ticker-price">${formatPrice(t.price)}</span>
+                <span class="ticker-symbol">${symbol}</span>
+                <span class="ticker-price">${formatPrice(price)}</span>
                 <span class="ticker-time">${timeStr}</span>
             </div>
         `;
