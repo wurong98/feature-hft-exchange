@@ -145,6 +145,13 @@ const API_ENDPOINTS = [
                 params: [
                     { name: 'symbol', type: 'string', required: true, default: 'BTCUSDT', desc: '交易对' }
                 ]
+            },
+            {
+                method: 'GET',
+                path: '/api/latestTrades',
+                desc: '获取HFT后端最新成交数据（从币安WebSocket接收）',
+                auth: false,
+                params: []
             }
         ]
     }
