@@ -2,14 +2,6 @@
 let currentStrategy = null;
 let leaderboardData = [];
 let refreshInterval = null;
-let wsConnection = null;
-let supportedSymbols = [];
-let latestPrices = {}; // Track latest prices for each symbol
-
-// State Management
-let currentStrategy = null;
-let leaderboardData = [];
-let refreshInterval = null;
 let supportedSymbols = [];
 let latestPrices = {}; // Track latest prices for each symbol
 
