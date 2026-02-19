@@ -54,7 +54,8 @@ go build -o bin/admin ./cmd/admin
 
 服务启动后：
 - API 服务器: http://localhost:8080
-- Web Dashboard: http://localhost:8080 (首页)
+- Web Dashboard: http://localhost:8080/dashboard
+- 根路径 `/` 会自动跳转到 `/dashboard`
 
 ## 部署方式
 
@@ -200,7 +201,7 @@ print(positions)
         ▼                   ▼                   ▼
 ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
 │  REST API     │  │  WebSocket    │  │  Web Dashboard│
-│  /api/v3/*    │  │  /ws          │  │  /            │
+│  /api/v3/*    │  │  /ws          │  │  /dashboard   │
 └───────────────┘  └───────────────┘  └───────────────┘
 ```
 

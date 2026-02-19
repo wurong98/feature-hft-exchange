@@ -50,8 +50,13 @@ func (s *Server) setupRoutes() {
 	// WebSocket
 	s.router.GET("/ws", s.handleWebSocket)
 
-	// Static files
-	s.router.Static("/", "./web")
+	// Static files (Dashboard)
+	s.router.Static("/dashboard", "./web")
+
+	// Redirect root to dashboard
+	s.router.GET("/", func(c *gin.Context) {
+		c.Redirect(302, "/dashboard")
+	})
 }
 
 func (s *Server) Run(addr string) error {
