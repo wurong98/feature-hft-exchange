@@ -129,23 +129,43 @@ async function selectStrategy(apiKey) {
     panel.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
 
     try {
-        const [stats, positions, trades, orders, snapshots, orderbook] = await Promise.all([
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/orderbook/BTCUSDT`).then(r => r.json())
+        const [statsRes, positionsRes, tradesRes, ordersRes, snapshotsRes, orderbookRes] = await Promise.all([
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`),
+            fetch(`${API_BASE}/api/dashboard/orderbook/BTCUSDT`)
         ]);
 
-        renderStrategyDetail(stats, positions, trades, orders, snapshots, orderbook);
+        const stats = await statsRes.json();
+        const positions = await positionsRes.json();
+        const trades = await tradesRes.json();
+        const orders = await ordersRes.json();
+        const snapshots = await snapshotsRes.json();
+        const orderbook = await orderbookRes.json();
+
+        // Check for API errors
+        if (stats.error) {
+            panel.innerHTML = `<div class="empty-state"><h3>加载失败</h3><p>${stats.error}</p></div>`;
+            return;
+        }
+
+        // Ensure arrays exist
+        const safePositions = Array.isArray(positions) ? positions : [];
+        const safeTrades = Array.isArray(trades) ? trades : [];
+        const safeOrders = Array.isArray(orders) ? orders : [];
+        const safeSnapshots = Array.isArray(snapshots) ? snapshots : [];
+        const safeOrderbook = orderbook || { asks: [], bids: [] };
+
+        renderStrategyDetail(stats, safePositions, safeTrades, safeOrders, safeSnapshots, safeOrderbook);
 
         // Auto refresh every 5 seconds
         if (refreshInterval) clearInterval(refreshInterval);
         refreshInterval = setInterval(() => refreshDetail(apiKey), 5000);
     } catch (error) {
         console.error('Error:', error);
-        panel.innerHTML = '<div class="empty-state">加载失败，请重试</div>';
+        panel.innerHTML = '<div class="empty-state"><h3>加载失败</h3><p>无法获取策略详情，请稍后重试</p></div>';
     }
 }
 
@@ -153,14 +173,25 @@ async function refreshDetail(apiKey) {
     if (!currentStrategy || currentStrategy.apiKey !== apiKey) return;
 
     try {
-        const [positions, trades, orders, snapshots] = await Promise.all([
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`).then(r => r.json()),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`).then(r => r.json())
+        const [positionsRes, tradesRes, ordersRes, snapshotsRes] = await Promise.all([
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`),
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`)
         ]);
 
-        updateDynamicSections(positions, trades, orders, snapshots);
+        const positions = await positionsRes.json();
+        const trades = await tradesRes.json();
+        const orders = await ordersRes.json();
+        const snapshots = await snapshotsRes.json();
+
+        // Ensure arrays exist
+        const safePositions = Array.isArray(positions) ? positions : [];
+        const safeTrades = Array.isArray(trades) ? trades : [];
+        const safeOrders = Array.isArray(orders) ? orders : [];
+        const safeSnapshots = Array.isArray(snapshots) ? snapshots : [];
+
+        updateDynamicSections(safePositions, safeTrades, safeOrders, safeSnapshots);
     } catch (error) {
         console.error('Refresh error:', error);
     }
