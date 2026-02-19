@@ -71,6 +71,11 @@ func (s *Server) setupRoutes() {
 	// Static files (Dashboard)
 	s.router.Static("/dashboard", "./web")
 
+	// API Docs page
+	s.router.GET("/api-docs", func(c *gin.Context) {
+		c.File("./web/api-docs.html")
+	})
+
 	// Redirect root to dashboard
 	s.router.GET("/", func(c *gin.Context) {
 		c.Redirect(302, "/dashboard")
