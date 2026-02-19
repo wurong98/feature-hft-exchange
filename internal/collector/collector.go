@@ -73,7 +73,7 @@ func (c *Collector) connect() error {
 		if i > 0 {
 			streams += "/"
 		}
-		streams += fmt.Sprintf("%s@aggTrade", strings.ToLower(symbol))
+		streams += fmt.Sprintf("%s@trade", strings.ToLower(symbol))
 	}
 
 	url := fmt.Sprintf("%s/%s", c.wsURL, streams)
@@ -119,7 +119,7 @@ func (c *Collector) readLoop() {
 				continue
 			}
 
-			if trade.EventType == "aggTrade" {
+			if trade.EventType == "trade" {
 				select {
 				case c.trades <- trade:
 				default:
