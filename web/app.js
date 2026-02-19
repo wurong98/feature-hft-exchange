@@ -99,6 +99,9 @@ function renderLeaderboard() {
                         ${pnl >= 0 ? '+' : ''}${formatNumber(pnl)}
                     </span>
                 </div>
+                <div class="strategy-desc" style="font-size: 11px; color: var(--text-muted); margin: 4px 0 8px 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${strategy.description || '暂无描述'}
+                </div>
                 <div class="strategy-stats">
                     <div class="strategy-stat">
                         <span>ROI</span>
@@ -129,13 +132,12 @@ async function selectStrategy(apiKey) {
     panel.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
 
     try {
-        const [statsRes, positionsRes, tradesRes, ordersRes, snapshotsRes, orderbookRes] = await Promise.all([
+        const [statsRes, positionsRes, tradesRes, ordersRes, snapshotsRes] = await Promise.all([
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}`),
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`),
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`),
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`),
-            fetch(`${API_BASE}/api/dashboard/orderbook/BTCUSDT`)
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=10000`) // 获取全部历史
         ]);
 
         const stats = await statsRes.json();
@@ -143,7 +145,6 @@ async function selectStrategy(apiKey) {
         const trades = await tradesRes.json();
         const orders = await ordersRes.json();
         const snapshots = await snapshotsRes.json();
-        const orderbook = await orderbookRes.json();
 
         // Check for API errors
         if (stats.error) {
@@ -156,9 +157,8 @@ async function selectStrategy(apiKey) {
         const safeTrades = Array.isArray(trades) ? trades : [];
         const safeOrders = Array.isArray(orders) ? orders : [];
         const safeSnapshots = Array.isArray(snapshots) ? snapshots : [];
-        const safeOrderbook = orderbook || { asks: [], bids: [] };
 
-        renderStrategyDetail(stats, safePositions, safeTrades, safeOrders, safeSnapshots, safeOrderbook);
+        renderStrategyDetail(stats, safePositions, safeTrades, safeOrders, safeSnapshots);
 
         // Auto refresh every 5 seconds
         if (refreshInterval) clearInterval(refreshInterval);
@@ -177,7 +177,7 @@ async function refreshDetail(apiKey) {
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/positions`),
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/trades`),
             fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/orders`),
-            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=144`)
+            fetch(`${API_BASE}/api/dashboard/strategy/${apiKey}/snapshots?limit=10000`) // 获取全部历史
         ]);
 
         const positions = await positionsRes.json();
@@ -222,7 +222,7 @@ function updateDynamicSections(positions, trades, orders, snapshots) {
     }
 }
 
-function renderStrategyDetail(stats, positions, trades, orders, snapshots, orderbook) {
+function renderStrategyDetail(stats, positions, trades, orders, snapshots) {
     const panel = document.getElementById('detail-panel');
 
     const available = parseFloat(stats.available) || 0;
@@ -232,6 +232,15 @@ function renderStrategyDetail(stats, positions, trades, orders, snapshots, order
     const initialBalance = parseFloat(stats.initialBalance) || 0;
     const totalEquity = available + frozen;
     const marginUsage = initialBalance > 0 ? (frozen / initialBalance * 100) : 0;
+
+    // 计算持仓总价值
+    const positionValue = positions.reduce((sum, p) => sum + (parseFloat(p.margin) || 0), 0);
+    // 计算未实现盈亏
+    const unrealizedPnl = positions.reduce((sum, p) => sum + (parseFloat(p.unrealizedPnl) || 0), 0);
+    // 计算平均杠杆
+    const avgLeverage = positions.length > 0
+        ? positions.reduce((sum, p) => sum + (parseInt(p.leverage) || 0), 0) / positions.length
+        : 0;
 
     let riskLevel = 'low', riskText = '低风险';
     if (marginUsage > 50) { riskLevel = 'high'; riskText = '高风险'; }
@@ -245,29 +254,24 @@ function renderStrategyDetail(stats, positions, trades, orders, snapshots, order
                 <div class="top-stat-change ${getROIColor(roi)}">${roi >= 0 ? '+' : ''}${formatNumber(roi)}% ROI</div>
             </div>
             <div class="top-stat-card">
+                <div class="top-stat-label">未实现盈亏</div>
+                <div class="top-stat-value ${getROIColor(unrealizedPnl)}">${unrealizedPnl >= 0 ? '+' : ''}${formatNumber(unrealizedPnl)} USDT</div>
+                <div class="top-stat-change" style="color: var(--text-muted);">持仓 ${positions.length} 个</div>
+            </div>
+            <div class="top-stat-card">
                 <div class="top-stat-label">当前权益</div>
                 <div class="top-stat-value">${formatNumber(totalEquity)} USDT</div>
                 <div class="top-stat-change" style="color: var(--text-muted);">初始: ${formatNumber(initialBalance)}</div>
             </div>
             <div class="top-stat-card">
-                <div class="top-stat-label">可用余额</div>
+                <div class="top-stat-label">可用保证金</div>
                 <div class="top-stat-value">${formatNumber(available)} USDT</div>
                 <div class="top-stat-change" style="color: var(--text-muted);">冻结: ${formatNumber(frozen)}</div>
             </div>
             <div class="top-stat-card">
-                <div class="top-stat-label">持仓数量</div>
-                <div class="top-stat-value">${positions.length}</div>
-                <div class="top-stat-change" style="color: var(--text-muted);">未成交: ${orders.length}</div>
-            </div>
-            <div class="top-stat-card">
-                <div class="top-stat-label">风险等级</div>
-                <div class="risk-meter" style="margin-top: 8px;">
-                    <div class="risk-bar">
-                        <div class="risk-fill ${riskLevel}" style="width: ${Math.min(marginUsage, 100)}%"></div>
-                    </div>
-                    <span class="risk-text ${riskLevel}">${riskText}</span>
-                </div>
-                <div class="top-stat-change" style="color: var(--text-muted); margin-top: 4px;">保证金占用: ${formatNumber(marginUsage)}%</div>
+                <div class="top-stat-label">合约仓位价值</div>
+                <div class="top-stat-value">${formatNumber(positionValue)} USDT</div>
+                <div class="top-stat-change" style="color: var(--text-muted);">平均 ${avgLeverage.toFixed(1)}x 杠杆</div>
             </div>
         </div>
 
@@ -275,7 +279,7 @@ function renderStrategyDetail(stats, positions, trades, orders, snapshots, order
             <div class="left-column">
                 <div class="card">
                     <div class="card-header">
-                        <span class="card-title">收益曲线 (24H)</span>
+                        <span class="card-title">收益曲线 (全部历史)</span>
                     </div>
                     <div class="card-body">
                         <div class="chart-container" id="pnl-chart">
@@ -336,30 +340,6 @@ function renderStrategyDetail(stats, positions, trades, orders, snapshots, order
             </div>
 
             <div class="right-column">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">订单簿 BTCUSDT</span>
-                    </div>
-                    <div class="card-body" style="padding: 0;">
-                        <div class="orderbook">
-                            <div class="orderbook-header" style="padding: 8px 12px;">
-                                <span>价格</span>
-                                <span>数量</span>
-                                <span>累计</span>
-                            </div>
-                            <div class="orderbook-asks" style="max-height: 150px; overflow: hidden;">
-                                ${renderOrderbookAsks(orderbook.asks.slice().reverse())}
-                            </div>
-                            <div style="padding: 8px 12px; background: var(--bg-tertiary); text-align: center; font-weight: 600; color: var(--text-primary);">
-                                ${orderbook.asks.length > 0 ? formatPrice(orderbook.asks[0].price) : '-'}
-                            </div>
-                            <div class="orderbook-bids" style="max-height: 150px; overflow: hidden;">
-                                ${renderOrderbookBids(orderbook.bids)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="card">
                     <div class="card-header">
                         <span class="card-title">当前委托</span>
@@ -423,14 +403,21 @@ function renderOrdersList(orders) {
     }
 
     return orders.map(o => `
-        <div class="order-item">
-            <div class="order-info">
-                <div class="order-symbol">${o.symbol} <span style="color: var(--text-muted);">${o.side}</span></div>
-                <div class="order-details">限价 ${formatPrice(o.price)} | ${o.leverage}x杠杆</div>
+        <div class="order-item" style="padding: 10px 12px; border-bottom: 1px solid var(--border-color);">
+            <div class="order-info" style="flex: 1;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span class="order-symbol">${o.symbol}</span>
+                    <span style="color: var(--text-muted); font-size: 11px;">ID: ${o.id || o.orderId}</span>
+                </div>
+                <div style="display: flex; gap: 12px; font-size: 11px;">
+                    <span class="${o.side === 'BUY' ? 'side-long' : 'side-short'}">${o.side}</span>
+                    <span style="color: var(--text-muted);">限价 ${formatPrice(o.price)}</span>
+                    <span style="color: var(--text-muted);">${o.leverage}x杠杆</span>
+                </div>
             </div>
-            <div class="order-price">
-                <div class="order-amount">${formatNumber(o.quantity, 4)}</div>
-                <div class="order-type">${o.status}</div>
+            <div class="order-price" style="text-align: right;">
+                <div class="order-amount">${formatNumber(o.quantity || o.origQty, 4)}</div>
+                <div class="order-type" style="font-size: 11px; color: var(--text-muted);">${o.status}</div>
             </div>
         </div>
     `).join('');
