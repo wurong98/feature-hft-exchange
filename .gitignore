@@ -1,0 +1,6 @@
+.worktrees/
+*.db
+*.db-journal
+.env
+bin/
+dist/
