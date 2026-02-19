@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,13 +67,13 @@ func (c *Collector) AddHandler(handler func(Trade)) {
 }
 
 func (c *Collector) connect() error {
-	// 构建订阅 URL
+	// 构建订阅 URL (symbol 必须是小写)
 	streams := ""
 	for i, symbol := range c.symbols {
 		if i > 0 {
 			streams += "/"
 		}
-		streams += fmt.Sprintf("%s@aggTrade", symbol)
+		streams += fmt.Sprintf("%s@aggTrade", strings.ToLower(symbol))
 	}
 
 	url := fmt.Sprintf("%s/%s", c.wsURL, streams)
