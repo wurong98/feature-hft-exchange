@@ -157,3 +157,48 @@ func (s *Server) getDepth(c *gin.Context) {
 		"asks":         [][]string{},
 	})
 }
+
+// ========== Dashboard API ==========
+
+func (s *Server) getLeaderboard(c *gin.Context) {
+	entries, err := s.leaderboardStore.GetLeaderboard()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, entries)
+}
+
+func (s *Server) getStrategyDetail(c *gin.Context) {
+	apiKey := c.Param("apiKey")
+	stats, err := s.leaderboardStore.GetStrategyStats(apiKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if stats == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Strategy not found"})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
+func (s *Server) getStrategyTrades(c *gin.Context) {
+	apiKey := c.Param("apiKey")
+	trades, err := s.orderStore.GetTradesByAPIKey(apiKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, trades)
+}
+
+func (s *Server) getStrategyPositions(c *gin.Context) {
+	apiKey := c.Param("apiKey")
+	positions, err := s.positionStore.GetByAPIKey(apiKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, positions)
+}

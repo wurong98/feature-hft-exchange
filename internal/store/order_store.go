@@ -97,3 +97,26 @@ func (s *OrderStore) CreateTrade(trade *models.Trade) error {
 		trade.Price, trade.Quantity, trade.QuoteQty, trade.Fee)
 	return err
 }
+
+func (s *OrderStore) GetTradesByAPIKey(apiKey string) ([]models.Trade, error) {
+	query := `SELECT id, order_id, api_key, symbol, side, price, quantity, quote_qty, fee, timestamp
+	          FROM trades WHERE api_key = ? ORDER BY timestamp DESC`
+
+	rows, err := s.db.Query(query, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var trades []models.Trade
+	for rows.Next() {
+		var t models.Trade
+		err := rows.Scan(&t.ID, &t.OrderID, &t.APIKey, &t.Symbol, &t.Side,
+			&t.Price, &t.Quantity, &t.QuoteQty, &t.Fee, &t.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		trades = append(trades, t)
+	}
+	return trades, nil
+}
