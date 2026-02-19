@@ -75,6 +75,9 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/api-docs", func(c *gin.Context) {
 		c.File("./web/api-docs.html")
 	})
+	s.router.GET("/api-docs.js", func(c *gin.Context) {
+		c.File("./web/api-docs.js")
+	})
 
 	// Redirect root to dashboard
 	s.router.GET("/", func(c *gin.Context) {
