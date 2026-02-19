@@ -114,6 +114,51 @@ EXPOSE 8080
 CMD ["./hft-sim"]
 ```
 
+## API 测试工具
+
+项目包含一个基于 CCXT 的 Python 测试脚本，方便快速测试 API 功能。
+
+### 安装依赖
+
+```bash
+pip install ccxt
+```
+
+### 测试脚本使用
+
+```bash
+# 完整测试（需要 API Key）
+python test_api.py --api-key YOUR_API_KEY
+
+# 指定自定义 URL
+python test_api.py --api-key YOUR_API_KEY --url http://192.168.1.100:8080
+
+# 测试指定交易对
+python test_api.py --api-key YOUR_API_KEY --symbol ETHUSDT
+
+# 只测试账户查询
+python test_api.py --api-key YOUR_API_KEY --action account
+
+# 创建测试订单（不自动取消）
+python test_api.py --api-key YOUR_API_KEY --action create --no-cancel
+
+# 手动设置价格和数量
+python test_api.py --api-key YOUR_API_KEY --action create --price 66000 --quantity 0.05 --leverage 20
+```
+
+### 测试脚本参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--api-key` | API Key（必需） | - |
+| `--url` | 交易所基础 URL | http://localhost:8080 |
+| `--symbol` | 交易对 | BTCUSDT |
+| `--action` | 测试动作: full/account/create/query/cancel | full |
+| `--price` | 挂单价格 | 65000 |
+| `--quantity` | 挂单数量 | 0.01 |
+| `--leverage` | 杠杆倍数 | 10 |
+| `--no-cancel` | 创建后不自动取消 | false |
+
 ## API 使用示例
 
 ### 使用 cURL
