@@ -24,7 +24,7 @@
 ```bash
 # 克隆项目
 git clone <repository-url>
-cd ShadowHFT
+cd feature-hft-exchange
 
 # 构建主程序
 go build -o bin/hft-sim .

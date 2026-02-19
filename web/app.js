@@ -2,6 +2,9 @@
 let currentStrategy = null;
 let leaderboardData = [];
 let refreshInterval = null;
+let wsConnection = null;
+let supportedSymbols = [];
+let latestPrices = {}; // Track latest prices for each symbol
 
 const API_BASE = '';
 
@@ -495,8 +498,177 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(loadLeaderboard, 5000);
 
     document.getElementById('search-input')?.addEventListener('input', renderLeaderboard);
+
+    // Load supported symbols and connect to WebSocket
+    loadSupportedSymbols();
 });
 
 window.addEventListener('beforeunload', () => {
     if (refreshInterval) clearInterval(refreshInterval);
+    if (wsConnection) wsConnection.close();
 });
+
+// ==================== WebSocket Trade Ticker ====================
+
+// Load supported symbols from config
+async function loadSupportedSymbols() {
+    try {
+        const response = await fetch(`${API_BASE}/api/config`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const symbolsStr = data.supportedSymbols || '';
+
+        // Parse symbols (assuming format like ["BTCUSDT","ETHUSDT"] or comma-separated)
+        if (symbolsStr.startsWith('[')) {
+            supportedSymbols = JSON.parse(symbolsStr);
+        } else {
+            supportedSymbols = symbolsStr.split(',').map(s => s.trim()).filter(s => s);
+        }
+
+        // Render symbols in bottom bar
+        renderSupportedSymbols();
+
+        // Connect to WebSocket for each symbol
+        connectTradeWebSockets();
+    } catch (err) {
+        console.error('Failed to load supported symbols:', err);
+    }
+}
+
+function renderSupportedSymbols() {
+    const container = document.getElementById('symbols-list');
+    if (!container || supportedSymbols.length === 0) return;
+
+    container.innerHTML = supportedSymbols.map(sym => `
+        <span class="symbol-tag" id="symbol-${sym}">${sym}</span>
+    `).join('');
+}
+
+// Connect to Binance WebSocket for real-time trade data
+function connectTradeWebSockets() {
+    const wsStatus = document.getElementById('ws-status');
+    const wsDot = document.getElementById('ws-dot');
+    const wsText = document.getElementById('ws-text');
+
+    if (supportedSymbols.length === 0) {
+        updateWSStatus('error', '无交易对');
+        return;
+    }
+
+    // Connect to Binance combined stream for all symbols
+    const streams = supportedSymbols.map(s => `${s.toLowerCase()}@aggTrade`).join('/');
+    const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
+
+    try {
+        wsConnection = new WebSocket(wsUrl);
+
+        wsConnection.onopen = () => {
+            updateWSStatus('connected', '已连接');
+        };
+
+        wsConnection.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleTradeUpdate(data);
+            } catch (e) {
+                console.error('Failed to parse WebSocket message:', e);
+            }
+        };
+
+        wsConnection.onerror = () => {
+            updateWSStatus('error', '连接错误');
+        };
+
+        wsConnection.onclose = () => {
+            updateWSStatus('error', '已断开');
+            // Try to reconnect after 5 seconds
+            setTimeout(connectTradeWebSockets, 5000);
+        };
+    } catch (err) {
+        updateWSStatus('error', '连接失败');
+    }
+}
+
+function updateWSStatus(status, text) {
+    const wsDot = document.getElementById('ws-dot');
+    const wsText = document.getElementById('ws-text');
+
+    if (!wsDot || !wsText) return;
+
+    wsDot.className = 'ws-dot';
+    if (status === 'connected') {
+        wsDot.classList.add('connected');
+    } else if (status === 'error') {
+        wsDot.classList.add('error');
+    }
+
+    wsText.textContent = text;
+}
+
+function handleTradeUpdate(trade) {
+    // Binance aggTrade format
+    const symbol = trade.s; // Symbol
+    const price = parseFloat(trade.p); // Price
+    const quantity = parseFloat(trade.q); // Quantity
+    const isBuyerMaker = trade.m; // Is buyer maker (true = sell, false = buy)
+    const time = trade.T; // Trade time
+
+    if (!symbol || !price) return;
+
+    // Store latest price
+    const prevPrice = latestPrices[symbol] || price;
+    latestPrices[symbol] = price;
+
+    // Update symbol tag to show it's active
+    const tag = document.getElementById(`symbol-${symbol}`);
+    if (tag) {
+        tag.classList.add('active');
+        setTimeout(() => tag.classList.remove('active'), 500);
+    }
+
+    // Add to ticker
+    addTradeToTicker({
+        symbol,
+        price,
+        quantity,
+        side: isBuyerMaker ? 'SELL' : 'BUY',
+        time
+    });
+}
+
+const tradeHistory = [];
+const MAX_TRADES = 10;
+
+function addTradeToTicker(trade) {
+    tradeHistory.unshift(trade);
+    if (tradeHistory.length > MAX_TRADES) {
+        tradeHistory.pop();
+    }
+
+    renderTradeTicker();
+}
+
+function renderTradeTicker() {
+    const container = document.getElementById('ticker-content');
+    if (!container) return;
+
+    if (tradeHistory.length === 0) {
+        container.innerHTML = '<span class="ticker-empty">等待数据...</span>';
+        return;
+    }
+
+    container.innerHTML = tradeHistory.map(t => {
+        const prevPrice = latestPrices[t.symbol] || t.price;
+        const priceChange = t.price >= prevPrice ? 'up' : 'down';
+        const timeStr = new Date(t.time).toLocaleTimeString('zh-CN', { hour12: false });
+
+        return `
+            <div class="ticker-item">
+                <span class="ticker-symbol">${t.symbol}</span>
+                <span class="ticker-price ${priceChange}">${formatPrice(t.price)}</span>
+                <span class="ticker-time">${timeStr}</span>
+            </div>
+        `;
+    }).join('');
+}

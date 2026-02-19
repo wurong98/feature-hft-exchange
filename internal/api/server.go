@@ -10,6 +10,7 @@ import (
 
 type Server struct {
 	router           *gin.Engine
+	db               *sql.DB
 	orderStore       *store.OrderStore
 	balanceStore     *store.BalanceStore
 	positionStore    *store.PositionStore
@@ -21,6 +22,7 @@ type Server struct {
 func NewServer(db *sql.DB) *Server {
 	s := &Server{
 		router:           gin.Default(),
+		db:               db,
 		orderStore:       store.NewOrderStore(db),
 		balanceStore:     store.NewBalanceStore(db),
 		positionStore:    store.NewPositionStore(db),
@@ -52,6 +54,7 @@ func (s *Server) setupRoutes() {
 	// Public endpoints
 	s.router.GET("/api/v3/exchangeInfo", s.getExchangeInfo)
 	s.router.GET("/api/v3/depth", s.getDepth)
+	s.router.GET("/api/config", s.getConfig)
 
 	// Dashboard API (公开访问)
 	dashboard := s.router.Group("/api/dashboard")

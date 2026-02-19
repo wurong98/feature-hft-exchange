@@ -506,6 +506,148 @@
             display: flex;
             flex-direction: column;
         }
+
+        /* Bottom Bar - WebSocket Ticker */
+        .bottom-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 20px;
+            z-index: 100;
+        }
+
+        .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 100px;
+        }
+
+        .ws-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            animation: pulse 2s infinite;
+        }
+
+        .ws-dot.connected {
+            background: var(--color-long);
+            animation: none;
+        }
+
+        .ws-dot.error {
+            background: var(--color-short);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .ws-text {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .symbols-list {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            max-width: 300px;
+        }
+
+        .symbol-tag {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .symbol-tag.active {
+            border-color: var(--color-accent);
+            color: var(--color-accent);
+        }
+
+        .trade-ticker {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            overflow: hidden;
+        }
+
+        .ticker-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .ticker-content {
+            flex: 1;
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .ticker-content::-webkit-scrollbar {
+            display: none;
+        }
+
+        .ticker-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .ticker-symbol {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .ticker-price {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .ticker-price.up {
+            color: var(--color-long);
+        }
+
+        .ticker-price.down {
+            color: var(--color-short);
+        }
+
+        .ticker-time {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .ticker-empty {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        /* Adjust main container for bottom bar */
+        .main-container {
+            height: calc(100vh - 50px - 40px);
+        }
     </style>
 </head>
 <body>
@@ -554,6 +696,23 @@
                 <p>点击左侧策略查看持仓、成交记录和收益分析</p>
             </div>
         </main>
+    </div>
+
+    <!-- Bottom Bar: WebSocket Trade Ticker -->
+    <div class="bottom-bar" id="bottom-bar">
+        <div class="ws-status" id="ws-status">
+            <span class="ws-dot" id="ws-dot"></span>
+            <span class="ws-text" id="ws-text">连接中...</span>
+        </div>
+        <div class="symbols-list" id="symbols-list">
+            <!-- Supported symbols will be displayed here -->
+        </div>
+        <div class="trade-ticker" id="trade-ticker">
+            <div class="ticker-label">最新成交</div>
+            <div class="ticker-content" id="ticker-content">
+                <span class="ticker-empty">等待数据...</span>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

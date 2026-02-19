@@ -252,3 +252,35 @@ func (s *Server) getOrderbook(c *gin.Context) {
 	snapshot := s.orderbook.GetSnapshot(symbol)
 	c.JSON(http.StatusOK, snapshot)
 }
+
+// getConfig 获取系统配置
+func (s *Server) getConfig(c *gin.Context) {
+	key := c.Query("key")
+	if key != "" {
+		// Get single config value
+		value, err := s.getConfigValue(key)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"value": ""})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"value": value})
+		return
+	}
+
+	// Get all common configs
+	symbols, _ := s.getConfigValue("supported_symbols")
+	maxLeverage, _ := s.getConfigValue("max_leverage")
+	defaultLeverage, _ := s.getConfigValue("default_leverage")
+
+	c.JSON(http.StatusOK, gin.H{
+		"supportedSymbols":  symbols,
+		"maxLeverage":       maxLeverage,
+		"defaultLeverage":   defaultLeverage,
+	})
+}
+
+func (s *Server) getConfigValue(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM config WHERE key = ?", key).Scan(&value)
+	return value, err
+}
