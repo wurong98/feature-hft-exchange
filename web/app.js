@@ -7,8 +7,10 @@ const API_BASE = '';
 
 // 格式化数字
 function formatNumber(num, decimals = 2) {
-    if (num === undefined || num === null) return '-';
-    return num.toFixed(decimals);
+    if (num === undefined || num === null || num === '') return '-';
+    const n = parseFloat(num);
+    if (isNaN(n)) return '-';
+    return n.toFixed(decimals);
 }
 
 // 格式化收益率
@@ -45,7 +47,10 @@ function renderLeaderboard() {
         return;
     }
 
-    container.innerHTML = leaderboardData.map((strategy, index) => `
+    container.innerHTML = leaderboardData.map((strategy, index) => {
+        const totalPnl = parseFloat(strategy.totalPnl) || 0;
+        const roi = parseFloat(strategy.roi) || 0;
+        return `
         <div class="strategy-item ${currentStrategy?.apiKey === strategy.apiKey ? 'active' : ''}"
              onclick="selectStrategy('${strategy.apiKey}')">
             <div class="strategy-header">
@@ -55,8 +60,8 @@ function renderLeaderboard() {
             <div class="strategy-desc">${strategy.description || '暂无描述'}</div>
             <div class="strategy-stats">
                 <div>
-                    <span class="stat-value ${strategy.totalPnl >= 0 ? 'profit' : 'loss'}">
-                        ${strategy.totalPnl >= 0 ? '+' : ''}${formatNumber(strategy.totalPnl)}
+                    <span class="stat-value ${totalPnl >= 0 ? 'profit' : 'loss'}">
+                        ${totalPnl >= 0 ? '+' : ''}${formatNumber(totalPnl)}
                     </span>
                     <span class="stat-label">USDT</span>
                 </div>
@@ -65,14 +70,14 @@ function renderLeaderboard() {
                     <span class="stat-label">成交</span>
                 </div>
                 <div>
-                    <span class="stat-value ${strategy.roi >= 0 ? 'profit' : 'loss'}">
-                        ${strategy.roi >= 0 ? '+' : ''}${formatNumber(strategy.roi)}%
+                    <span class="stat-value ${roi >= 0 ? 'profit' : 'loss'}">
+                        ${roi >= 0 ? '+' : ''}${formatNumber(roi)}%
                     </span>
                     <span class="stat-label">ROI</span>
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // 选择策略
@@ -112,8 +117,14 @@ async function selectStrategy(apiKey) {
 function renderStrategyDetail(stats, positions, trades) {
     const detailPanel = document.getElementById('detail-panel');
 
-    const totalEquity = stats.available + stats.frozen;
-    const marginUsage = stats.initialBalance > 0 ? (stats.frozen / stats.initialBalance * 100) : 0;
+    const available = parseFloat(stats.available) || 0;
+    const frozen = parseFloat(stats.frozen) || 0;
+    const totalPnl = parseFloat(stats.totalPnl) || 0;
+    const roi = parseFloat(stats.roi) || 0;
+    const initialBalance = parseFloat(stats.initialBalance) || 0;
+
+    const totalEquity = available + frozen;
+    const marginUsage = initialBalance > 0 ? (frozen / initialBalance * 100) : 0;
 
     // 计算风险等级
     let riskClass = 'risk-low';
@@ -135,16 +146,16 @@ function renderStrategyDetail(stats, positions, trades) {
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-card-title">累计收益 (USDT)</div>
-                <div class="stat-card-value ${stats.totalPnl >= 0 ? 'profit' : 'loss'}">
-                    ${stats.totalPnl >= 0 ? '+' : ''}${formatNumber(stats.totalPnl)}
+                <div class="stat-card-value ${totalPnl >= 0 ? 'profit' : 'loss'}">
+                    ${totalPnl >= 0 ? '+' : ''}${formatNumber(totalPnl)}
                 </div>
-                <div class="stat-card-sub">初始资金: ${formatNumber(stats.initialBalance)} USDT</div>
+                <div class="stat-card-sub">初始资金: ${formatNumber(initialBalance)} USDT</div>
             </div>
 
             <div class="stat-card">
                 <div class="stat-card-title">收益率 (ROI)</div>
-                <div class="stat-card-value ${stats.roi >= 0 ? 'profit' : 'loss'}">
-                    ${stats.roi >= 0 ? '+' : ''}${formatNumber(stats.roi)}%
+                <div class="stat-card-value ${roi >= 0 ? 'profit' : 'loss'}">
+                    ${roi >= 0 ? '+' : ''}${formatNumber(roi)}%
                 </div>
                 <div class="stat-card-sub">总交易: ${stats.tradeCount || 0} 笔</div>
             </div>
@@ -152,7 +163,7 @@ function renderStrategyDetail(stats, positions, trades) {
             <div class="stat-card">
                 <div class="stat-card-title">当前权益</div>
                 <div class="stat-card-value">${formatNumber(totalEquity)}</div>
-                <div class="stat-card-sub">可用: ${formatNumber(stats.available)} / 冻结: ${formatNumber(stats.frozen)}</div>
+                <div class="stat-card-sub">可用: ${formatNumber(available)} / 冻结: ${formatNumber(frozen)}</div>
             </div>
 
             <div class="stat-card">
@@ -178,7 +189,9 @@ function renderStrategyDetail(stats, positions, trades) {
                         </tr>
                     </thead>
                     <tbody>
-                        ${positions.map(p => `
+                        ${positions.map(p => {
+                            const unrealizedPnl = parseFloat(p.unrealizedPnl) || 0;
+                            return `
                             <tr>
                                 <td>${p.symbol}</td>
                                 <td class="${p.side === 'LONG' ? 'side-long' : 'side-short'}">${p.side}</td>
@@ -186,11 +199,11 @@ function renderStrategyDetail(stats, positions, trades) {
                                 <td>${formatNumber(p.size)}</td>
                                 <td>${p.leverage}x</td>
                                 <td>${formatNumber(p.margin)} USDT</td>
-                                <td class="${p.unrealizedPnl >= 0 ? 'profit' : 'loss'}">
-                                    ${p.unrealizedPnl >= 0 ? '+' : ''}${formatNumber(p.unrealizedPnl)}
+                                <td class="${unrealizedPnl >= 0 ? 'profit' : 'loss'}">
+                                    ${unrealizedPnl >= 0 ? '+' : ''}${formatNumber(unrealizedPnl)}
                                 </td>
                             </tr>
-                        `).join('')}
+                        `}).join('')}
                     </tbody>
                 </table>
             ` : '<div class="empty-state">暂无持仓</div>'}
