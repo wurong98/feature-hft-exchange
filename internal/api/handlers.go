@@ -273,9 +273,9 @@ func (s *Server) getConfig(c *gin.Context) {
 	defaultLeverage, _ := s.getConfigValue("default_leverage")
 
 	c.JSON(http.StatusOK, gin.H{
-		"supportedSymbols":  symbols,
-		"maxLeverage":       maxLeverage,
-		"defaultLeverage":   defaultLeverage,
+		"supportedSymbols": symbols,
+		"maxLeverage":      maxLeverage,
+		"defaultLeverage":  defaultLeverage,
 	})
 }
 
@@ -283,4 +283,15 @@ func (s *Server) getConfigValue(key string) (string, error) {
 	var value string
 	err := s.db.QueryRow("SELECT value FROM config WHERE key = ?", key).Scan(&value)
 	return value, err
+}
+
+// getLatestTrades 获取最新的成交数据
+func (s *Server) getLatestTrades(c *gin.Context) {
+	if s.collector == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Collector not initialized"})
+		return
+	}
+
+	trades := s.collector.GetLatestTrades()
+	c.JSON(http.StatusOK, trades)
 }

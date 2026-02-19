@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"hft-sim/internal/collector"
 	"hft-sim/internal/store"
 )
 
@@ -17,6 +18,7 @@ type Server struct {
 	leaderboardStore *store.LeaderboardStore
 	snapshotStore    *store.SnapshotStore
 	orderbook        *Orderbook
+	collector        *collector.Collector
 }
 
 func NewServer(db *sql.DB) *Server {
@@ -55,6 +57,7 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/api/v3/exchangeInfo", s.getExchangeInfo)
 	s.router.GET("/api/v3/depth", s.getDepth)
 	s.router.GET("/api/config", s.getConfig)
+	s.router.GET("/api/latestTrades", s.getLatestTrades)
 
 	// Dashboard API (公开访问)
 	dashboard := s.router.Group("/api/dashboard")
@@ -90,4 +93,8 @@ func (s *Server) setupRoutes() {
 
 func (s *Server) Run(addr string) error {
 	return s.router.Run(addr)
+}
+
+func (s *Server) SetCollector(collector *collector.Collector) {
+	s.collector = collector
 }

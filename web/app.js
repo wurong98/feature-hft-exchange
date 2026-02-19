@@ -6,6 +6,13 @@ let wsConnection = null;
 let supportedSymbols = [];
 let latestPrices = {}; // Track latest prices for each symbol
 
+// State Management
+let currentStrategy = null;
+let leaderboardData = [];
+let refreshInterval = null;
+let supportedSymbols = [];
+let latestPrices = {}; // Track latest prices for each symbol
+
 const API_BASE = '';
 
 // Utility Functions
@@ -505,12 +512,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('beforeunload', () => {
     if (refreshInterval) clearInterval(refreshInterval);
-    if (wsConnection) wsConnection.close();
 });
 
 // ==================== WebSocket Trade Ticker ====================
 
-// Load supported symbols from config
+// Load supported symbols and start polling latest trades
 async function loadSupportedSymbols() {
     try {
         const response = await fetch(`${API_BASE}/api/config`);
@@ -529,10 +535,13 @@ async function loadSupportedSymbols() {
         // Render symbols in bottom bar
         renderSupportedSymbols();
 
-        // Connect to WebSocket for each symbol
-        connectTradeWebSockets();
+        // Start polling for latest trades
+        updateWSStatus('connected', '已连接');
+        pollLatestTrades();
+        setInterval(pollLatestTrades, 1000); // Poll every second
     } catch (err) {
         console.error('Failed to load supported symbols:', err);
+        updateWSStatus('error', '配置加载失败');
     }
 }
 
@@ -545,48 +554,25 @@ function renderSupportedSymbols() {
     `).join('');
 }
 
-// Connect to Binance WebSocket for real-time trade data
-function connectTradeWebSockets() {
-    const wsStatus = document.getElementById('ws-status');
-    const wsDot = document.getElementById('ws-dot');
-    const wsText = document.getElementById('ws-text');
-
-    if (supportedSymbols.length === 0) {
-        updateWSStatus('error', '无交易对');
-        return;
-    }
-
-    // Connect to Binance combined stream for all symbols
-    const streams = supportedSymbols.map(s => `${s.toLowerCase()}@aggTrade`).join('/');
-    const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
-
+// Poll latest trades from backend API
+async function pollLatestTrades() {
     try {
-        wsConnection = new WebSocket(wsUrl);
+        const response = await fetch(`${API_BASE}/api/latestTrades`);
+        if (!response.ok) {
+            updateWSStatus('error', '数据获取失败');
+            return;
+        }
 
-        wsConnection.onopen = () => {
-            updateWSStatus('connected', '已连接');
-        };
+        const trades = await response.json();
+        updateWSStatus('connected', '数据正常');
 
-        wsConnection.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                handleTradeUpdate(data);
-            } catch (e) {
-                console.error('Failed to parse WebSocket message:', e);
-            }
-        };
-
-        wsConnection.onerror = () => {
-            updateWSStatus('error', '连接错误');
-        };
-
-        wsConnection.onclose = () => {
-            updateWSStatus('error', '已断开');
-            // Try to reconnect after 5 seconds
-            setTimeout(connectTradeWebSockets, 5000);
-        };
+        // Process each trade
+        Object.entries(trades).forEach(([symbol, trade]) => {
+            handleTradeUpdate(trade);
+        });
     } catch (err) {
-        updateWSStatus('error', '连接失败');
+        console.error('Failed to poll latest trades:', err);
+        updateWSStatus('error', '连接错误');
     }
 }
 
@@ -607,12 +593,12 @@ function updateWSStatus(status, text) {
 }
 
 function handleTradeUpdate(trade) {
-    // Binance aggTrade format
-    const symbol = trade.s; // Symbol
-    const price = parseFloat(trade.p); // Price
-    const quantity = parseFloat(trade.q); // Quantity
-    const isBuyerMaker = trade.m; // Is buyer maker (true = sell, false = buy)
-    const time = trade.T; // Trade time
+    // HFT backend trade format (matches collector.Trade)
+    const symbol = trade.s || trade.Symbol; // Symbol
+    const price = parseFloat(trade.p || trade.Price); // Price
+    const quantity = parseFloat(trade.q || trade.Quantity); // Quantity
+    const isBuyerMaker = trade.m || trade.IsBuyerMM; // Is buyer maker
+    const time = trade.T || trade.TradeTime || trade.EventTime; // Trade time
 
     if (!symbol || !price) return;
 
@@ -641,10 +627,23 @@ const tradeHistory = [];
 const MAX_TRADES = 10;
 
 function addTradeToTicker(trade) {
-    tradeHistory.unshift(trade);
+    // Check if this symbol already exists in history
+    const existingIndex = tradeHistory.findIndex(t => t.symbol === trade.symbol);
+    if (existingIndex >= 0) {
+        // Update existing
+        tradeHistory[existingIndex] = trade;
+    } else {
+        // Add new
+        tradeHistory.unshift(trade);
+    }
+
+    // Keep only MAX_TRADES
     if (tradeHistory.length > MAX_TRADES) {
         tradeHistory.pop();
     }
+
+    // Sort by time (newest first)
+    tradeHistory.sort((a, b) => b.time - a.time);
 
     renderTradeTicker();
 }
@@ -659,14 +658,12 @@ function renderTradeTicker() {
     }
 
     container.innerHTML = tradeHistory.map(t => {
-        const prevPrice = latestPrices[t.symbol] || t.price;
-        const priceChange = t.price >= prevPrice ? 'up' : 'down';
         const timeStr = new Date(t.time).toLocaleTimeString('zh-CN', { hour12: false });
 
         return `
             <div class="ticker-item">
                 <span class="ticker-symbol">${t.symbol}</span>
-                <span class="ticker-price ${priceChange}">${formatPrice(t.price)}</span>
+                <span class="ticker-price">${formatPrice(t.price)}</span>
                 <span class="ticker-time">${timeStr}</span>
             </div>
         `;

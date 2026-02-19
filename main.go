@@ -51,6 +51,7 @@ func main() {
 
 	// 启动 API 服务器
 	server := api.NewServer(database.DB)
+	server.SetCollector(coll)
 	go func() {
 		if err := server.Run(":8080"); err != nil {
 			log.Fatal(err)

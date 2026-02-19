@@ -25,23 +25,38 @@ type Trade struct {
 }
 
 type Collector struct {
-	wsURL     string
-	symbols   []string
-	conn      *websocket.Conn
-	trades    chan Trade
-	stop      chan struct{}
-	mu        sync.RWMutex
-	handlers  []func(Trade)
+	wsURL          string
+	symbols        []string
+	conn           *websocket.Conn
+	trades         chan Trade
+	stop           chan struct{}
+	mu             sync.RWMutex
+	handlers       []func(Trade)
+	latestTrades   map[string]Trade // symbol -> latest trade
 }
 
 func New(wsURL string, symbols []string) *Collector {
 	return &Collector{
-		wsURL:   wsURL,
-		symbols: symbols,
-		trades:  make(chan Trade, 1000),
-		stop:    make(chan struct{}),
-		handlers: make([]func(Trade), 0),
+		wsURL:        wsURL,
+		symbols:      symbols,
+		trades:       make(chan Trade, 1000),
+		stop:         make(chan struct{}),
+		handlers:     make([]func(Trade), 0),
+		latestTrades: make(map[string]Trade),
 	}
+}
+
+// GetLatestTrades returns the latest trade for each symbol
+func (c *Collector) GetLatestTrades() map[string]Trade {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// Return a copy
+	result := make(map[string]Trade, len(c.latestTrades))
+	for k, v := range c.latestTrades {
+		result[k] = v
+	}
+	return result
 }
 
 func (c *Collector) AddHandler(handler func(Trade)) {
@@ -116,6 +131,11 @@ func (c *Collector) readLoop() {
 
 func (c *Collector) dispatchLoop() {
 	for trade := range c.trades {
+		// Save latest trade for each symbol
+		c.mu.Lock()
+		c.latestTrades[trade.Symbol] = trade
+		c.mu.Unlock()
+
 		c.mu.RLock()
 		handlers := c.handlers
 		c.mu.RUnlock()
