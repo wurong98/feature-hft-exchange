@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>HFT 策略排行榜</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; }
+        .header { padding: 20px; border-bottom: 1px solid #30363d; }
+        .header h1 { color: #58a6ff; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #30363d; }
+        th { color: #8b949e; }
+        .rank { font-weight: bold; color: #58a6ff; }
+        .profit { color: #3fb950; }
+        .loss { color: #f85149; }
+        .strategy-name { font-weight: 500; }
+        .strategy-desc { color: #8b949e; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>HFT 策略竞技场</h1>
+            <p>基于真实币安数据的模拟交易</p>
+        </div>
+    </div>
+    <div class="container">
+        <table id="leaderboard">
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>策略</th>
+                    <th>累计收益</th>
+                    <th>交易次数</th>
+                    <th>胜率</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
